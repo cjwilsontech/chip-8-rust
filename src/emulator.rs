@@ -46,9 +46,17 @@ impl Chip8 {
 
     pub fn cycle(&mut self) {
         let opcode = get_opcode(&self.memory, self.reg_pc);
-        self.reg_pc += 2;
 
-        todo!("Unknown opcode: {:#X}", opcode);
+        if opcode & 0xFFFF == 0x00E0 {
+            // 0x00E0 (clear the screen)
+            self.display = [false; 64 * 32];
+            self.reg_pc += 2;
+        } else if opcode & 0x1000 == 0x1000 {
+            // 0x1NNN (jump)
+            self.reg_pc = opcode & 0x0FFF;
+        } else {
+            todo!("Unknown opcode: {:#X}", opcode);
+        }
     }
 }
 
@@ -82,14 +90,6 @@ mod tests {
     }
 
     #[test]
-    fn emulator_cycle_increases_pc() {
-        let mut chip8 = Chip8::new();
-        let initial_pc = chip8.reg_pc;
-        chip8.cycle();
-        assert_eq!(chip8.reg_pc, initial_pc + 2);
-    }
-
-    #[test]
     fn loads_rom_data() {
         let mut chip8 = Chip8::new();
         let data = vec![1; 3232];
@@ -106,5 +106,27 @@ mod tests {
         let mut chip8 = Chip8::new();
         let data = vec![1; 3233];
         chip8.load(data).unwrap();
+    }
+
+    #[test]
+    fn clear() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x00;
+        chip8.memory[PROG_START + 1] = 0xE0;
+        chip8.display = [true; 64 * 32];
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x202);
+        assert_eq!(chip8.display, [false; 64 * 32]);
+    }
+
+    #[test]
+    fn jump() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x1A;
+        chip8.memory[PROG_START + 1] = 0xF8;
+        chip8.memory[0x0AF8] = 1;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x0AF8);
+        assert_eq!(chip8.memory[chip8.reg_pc as usize], 1);
     }
 }
