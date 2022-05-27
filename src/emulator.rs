@@ -47,7 +47,8 @@ impl Chip8 {
     pub fn cycle(&mut self) {
         let opcode = get_opcode(&self.memory, self.reg_pc);
         self.reg_pc += 2;
-        println!("Opcode: {:#X}", opcode);
+
+        todo!("Unknown opcode: {:#X}", opcode);
     }
 }
 

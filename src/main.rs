@@ -17,5 +17,7 @@ fn main() {
         panic!("Error loading data: {}", load_rom_result.unwrap_err());
     }
 
-    emulator.cycle();
+    loop {
+        emulator.cycle();
+    }
 }
