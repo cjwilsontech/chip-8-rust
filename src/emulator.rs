@@ -56,20 +56,20 @@ impl Chip8 {
             self.reg_sp -= 1;
             self.reg_pc = self.stack[self.reg_sp as usize];
             self.reg_pc += 2;
-        } else if opcode & 0x1000 == 0x1000 {
+        } else if opcode & 0xF000 == 0x1000 {
             // 0x1NNN (jump)
             self.reg_pc = opcode & 0x0FFF;
-        } else if opcode & 0x2000 == 0x2000 {
+        } else if opcode & 0xF000 == 0x2000 {
             // 0x2NNN (call subroutine)
             self.stack[self.reg_sp as usize] = self.reg_pc;
             self.reg_sp += 1;
             self.reg_pc = opcode & 0x0FFF;
-        } else if opcode & 0x6000 == 0x6000 {
+        } else if opcode & 0xF000 == 0x6000 {
             // 0x6XNN (vx := NN)
             let index = ((opcode & 0x0F00) >> 8) as usize;
             self.reg_v[index] = opcode as u8;
             self.reg_pc += 2;
-        } else if opcode & 0xA000 == 0xA000 {
+        } else if opcode & 0xF000 == 0xA000 {
             // 0xANNN (i := NNN)
             self.reg_i = opcode & 0x0FFF;
             self.reg_pc += 2;
