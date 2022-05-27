@@ -51,8 +51,18 @@ impl Chip8 {
             // 0x00E0 (clear the screen)
             self.display = [false; 64 * 32];
             self.reg_pc += 2;
+        } else if opcode & 0xFFFF == 0x00EE {
+            // 0x00EE (return from subroutine)
+            self.reg_sp -= 1;
+            self.reg_pc = self.stack[self.reg_sp as usize];
+            self.reg_pc += 2;
         } else if opcode & 0x1000 == 0x1000 {
             // 0x1NNN (jump)
+            self.reg_pc = opcode & 0x0FFF;
+        } else if opcode & 0x2000 == 0x2000 {
+            // 0x2NNN (call subroutine)
+            self.stack[self.reg_sp as usize] = self.reg_pc;
+            self.reg_sp += 1;
             self.reg_pc = opcode & 0x0FFF;
         } else if opcode & 0x6000 == 0x6000 {
             // 0x6XNN (vx := NN)
@@ -157,5 +167,21 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc, 0x202);
         assert_eq!(chip8.reg_i, 0x364);
+    }
+
+    #[test]
+    fn enter_and_exit_subroutine() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x23;
+        chip8.memory[PROG_START + 1] = 0x64;
+        chip8.memory[0x364] = 0x00;
+        chip8.memory[0x365] = 0xEE;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x364);
+        assert_eq!(chip8.reg_sp, 1);
+        assert_eq!(chip8.stack[0], 0x200);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x202);
+        assert_eq!(chip8.reg_sp, 0);
     }
 }
