@@ -1,3 +1,6 @@
+const PROG_START: usize = 0x200;
+const PROG_END: usize = 0xEA0;
+
 pub struct Chip8 {
     reg_pc: u16,
     reg_sp: u16,
@@ -15,7 +18,7 @@ pub struct Chip8 {
 impl Chip8 {
     pub fn new() -> Chip8 {
         Chip8 {
-            reg_pc: 0x200,
+            reg_pc: PROG_START as u16,
             reg_sp: 0,
             reg_i: 0,
             reg_timer_delay: 0,
@@ -27,6 +30,18 @@ impl Chip8 {
             keyboard: [false; 16],
             display: [false; 64 * 32],
         }
+    }
+
+    pub fn load(&mut self, data: Vec<u8>) -> Result<(), &str> {
+        if data.len() > PROG_END - PROG_START {
+            return Err("ROM data is too large for memory.");
+        }
+
+        for (index, data_byte) in data.into_iter().enumerate() {
+            self.memory[PROG_START + index] = data_byte;
+        }
+
+        Ok(())
     }
 
     pub fn cycle(&mut self) {
@@ -54,7 +69,7 @@ fn get_opcode(memory: &[u8; 4096], pc: u16) -> u16 {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_opcode, Chip8};
+    use super::{get_opcode, Chip8, PROG_END, PROG_START};
 
     #[test]
     fn can_get_opcode() {
@@ -71,5 +86,24 @@ mod tests {
         let initial_pc = chip8.reg_pc;
         chip8.cycle();
         assert_eq!(chip8.reg_pc, initial_pc + 2);
+    }
+
+    #[test]
+    fn loads_rom_data() {
+        let mut chip8 = Chip8::new();
+        let data = vec![1; 3232];
+        chip8.load(data).unwrap();
+        assert_eq!(chip8.memory[PROG_START - 1], 0);
+        assert_eq!(chip8.memory[PROG_START], 1);
+        assert_eq!(chip8.memory[PROG_END - 1], 1);
+        assert_eq!(chip8.memory[PROG_END], 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "ROM data is too large for memory.")]
+    fn prevents_rom_overflow() {
+        let mut chip8 = Chip8::new();
+        let data = vec![1; 3233];
+        chip8.load(data).unwrap();
     }
 }
