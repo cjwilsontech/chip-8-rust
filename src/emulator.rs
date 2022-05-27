@@ -1,3 +1,5 @@
+use rand::Rng;
+
 const PROG_START: usize = 0x200;
 const PROG_END: usize = 0xEA0;
 
@@ -110,6 +112,13 @@ impl Chip8 {
         } else if opcode & 0xF000 == 0xA000 {
             // 0xANNN (i := NNN)
             self.reg_i = opcode & 0x0FFF;
+            self.reg_pc += 2;
+        } else if opcode & 0xF000 == 0xC000 {
+            // 0xCXNN (vx := random NN)
+            let mut rng = rand::thread_rng();
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let mask = (opcode & 0xFF) as u8;
+            self.reg_v[index] = rng.gen::<u8>() & mask;
             self.reg_pc += 2;
         } else if opcode & 0xF0FF == 0xE09E {
             // 0xEX9E (if vx -key then)
@@ -360,5 +369,14 @@ mod tests {
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, PROG_START + 6);
+    }
+
+    #[test]
+    fn generate_random() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xC4;
+        chip8.memory[PROG_START + 1] = 0xFF;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
     }
 }
