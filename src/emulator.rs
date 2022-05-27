@@ -54,6 +54,11 @@ impl Chip8 {
         } else if opcode & 0x1000 == 0x1000 {
             // 0x1NNN (jump)
             self.reg_pc = opcode & 0x0FFF;
+        } else if opcode & 0x6000 == 0x6000 {
+            // 0x6XNN (vx := NN)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            self.reg_v[index] = opcode as u8;
+            self.reg_pc += 2;
         } else {
             todo!("Unknown opcode: {:#X}", opcode);
         }
@@ -128,5 +133,15 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc, 0x0AF8);
         assert_eq!(chip8.memory[chip8.reg_pc as usize], 1);
+    }
+
+    #[test]
+    fn set_register_to_const() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x63;
+        chip8.memory[PROG_START + 1] = 0x64;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x202);
+        assert_eq!(chip8.reg_v[3], 0x64);
     }
 }
