@@ -64,6 +64,24 @@ impl Chip8 {
             self.stack[self.reg_sp as usize] = self.reg_pc;
             self.reg_sp += 1;
             self.reg_pc = opcode & 0x0FFF;
+        } else if opcode & 0xF000 == 0x3000 {
+            // 0x3XNN (if vx != NN then)
+            let value = (opcode & 0xFF) as u8;
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let register_value = *self.reg_v.get(index).expect("V index to be in bounds.");
+            if value == register_value {
+                self.reg_pc += 2;
+            }
+            self.reg_pc += 2;
+        } else if opcode & 0xF000 == 0x4000 {
+            // 0x4XNN (if vx == NN then)
+            let value = (opcode & 0xFF) as u8;
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let register_value = *self.reg_v.get(index).expect("V index to be in bounds.");
+            if value != register_value {
+                self.reg_pc += 2;
+            }
+            self.reg_pc += 2;
         } else if opcode & 0xF000 == 0x6000 {
             // 0x6XNN (vx := NN)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -262,5 +280,33 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_timer_sound, 60);
+    }
+
+    #[test]
+    fn v_not_equals_const() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x34;
+        chip8.memory[PROG_START + 1] = 0x18;
+        chip8.memory[PROG_START + 4] = 0x34;
+        chip8.memory[PROG_START + 5] = 0x17;
+        chip8.reg_v[4] = 0x18;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 4);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 6);
+    }
+
+    #[test]
+    fn v_equals_const() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x44;
+        chip8.memory[PROG_START + 1] = 0x18;
+        chip8.memory[PROG_START + 2] = 0x44;
+        chip8.memory[PROG_START + 3] = 0x17;
+        chip8.reg_v[4] = 0x18;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 6);
     }
 }
