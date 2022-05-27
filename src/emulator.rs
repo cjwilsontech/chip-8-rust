@@ -73,6 +73,30 @@ impl Chip8 {
             // 0xANNN (i := NNN)
             self.reg_i = opcode & 0x0FFF;
             self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xE09E {
+            // 0xEX9E (if vx -key then)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let key_index = *self.reg_v.get(index).expect("V index to be in bounds.") as usize;
+            if *self
+                .keyboard
+                .get(key_index)
+                .expect("Keyboard index to be in bounds.")
+            {
+                self.reg_pc += 2;
+            }
+            self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xE0A1 {
+            // 0xEXA1 (if vx key then)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let key_index = *self.reg_v.get(index).expect("V index to be in bounds.") as usize;
+            if !*self
+                .keyboard
+                .get(key_index)
+                .expect("Keyboard index to be in bounds.")
+            {
+                self.reg_pc += 2;
+            }
+            self.reg_pc += 2;
         } else {
             todo!("Unknown opcode: {:#X}", opcode);
         }
@@ -183,5 +207,28 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc, 0x202);
         assert_eq!(chip8.reg_sp, 0);
+    }
+
+    #[test]
+    fn check_key_pressed() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xE4;
+        chip8.memory[PROG_START + 1] = 0x9E;
+        chip8.memory[PROG_START + 2] = 0xE3;
+        chip8.memory[PROG_START + 3] = 0xA1;
+        chip8.memory[PROG_START + 4] = 0xE3;
+        chip8.memory[PROG_START + 5] = 0x9E;
+        chip8.memory[PROG_START + 8] = 0xE4;
+        chip8.memory[PROG_START + 9] = 0xA1;
+        chip8.reg_v[3] = 4;
+        chip8.keyboard[4] = true;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 4);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 8);
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 12);
     }
 }
