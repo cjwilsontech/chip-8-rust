@@ -99,6 +99,12 @@ impl Chip8 {
             let index = ((opcode & 0x0F00) >> 8) as usize;
             self.reg_v[index] = opcode as u8;
             self.reg_pc += 2;
+        } else if opcode & 0xF000 == 0x7000 {
+            // 0x7XNN (vx += NN)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let value = (opcode & 0xFF) as u8;
+            self.reg_v[index] = u8::wrapping_add(self.reg_v[index], value);
+            self.reg_pc += 2;
         } else if opcode & 0xF00F == 0x9000 {
             // 0x9XY0 (if vx == vy then)
             let index_x = ((opcode & 0x0F00) >> 8) as usize;
@@ -486,5 +492,16 @@ mod tests {
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_v[4], 3);
         assert_eq!(chip8.reg_i, 0x2F3);
+    }
+
+    #[test]
+    fn add_const_to_vx() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x74;
+        chip8.memory[PROG_START + 1] = 0x05;
+        chip8.reg_v[4] = 3;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_v[4], 8);
     }
 }
