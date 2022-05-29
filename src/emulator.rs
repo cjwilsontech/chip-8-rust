@@ -154,6 +154,14 @@ impl Chip8 {
             let index = ((opcode & 0x0F00) >> 8) as usize;
             self.reg_timer_sound = *self.reg_v.get(index).expect("V index to be in bounds.");
             self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xF033 {
+            // 0xFX33 (bcd vx)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let value = self.reg_v.get(index).expect("V index to be in bounds.");
+            self.memory[self.reg_i as usize] = value / 100;
+            self.memory[self.reg_i as usize + 1] = (value / 10) % 10;
+            self.memory[self.reg_i as usize + 2] = value % 10;
+            self.reg_pc += 2;
         } else {
             todo!("Unknown opcode: {:#X}", opcode);
         }
@@ -378,5 +386,21 @@ mod tests {
         chip8.memory[PROG_START + 1] = 0xFF;
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+    }
+
+    #[test]
+    fn bcd() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x33;
+        chip8.reg_v[4] = 245;
+        chip8.reg_i = 0x2F5;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_i, 0x2F5);
+        assert_eq!(chip8.reg_v[4], 245);
+        assert_eq!(chip8.memory[0x2F5], 2);
+        assert_eq!(chip8.memory[0x2F6], 4);
+        assert_eq!(chip8.memory[0x2F7], 5);
     }
 }
