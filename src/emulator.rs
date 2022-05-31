@@ -2,13 +2,13 @@ use rand::Rng;
 
 pub struct Chip8 {
     reg_pc: u16,
-    reg_sp: u16,
+    reg_sp: u8,
     reg_i: u16,
     reg_timer_delay: u8,
     reg_timer_sound: u8,
     reg_v: [u8; 16],
 
-    stack: [u16; 16],
+    stack: [u16; STACK_SIZE],
     memory: [u8; 4096],
     keyboard: [bool; 16],
     display: [bool; 64 * 32],
@@ -24,7 +24,7 @@ impl Chip8 {
             reg_timer_sound: 0,
             reg_v: [0; 16],
 
-            stack: [0; 16],
+            stack: [0; STACK_SIZE],
             memory: initialize_memory(),
             keyboard: [false; 16],
             display: [false; 64 * 32],
@@ -52,7 +52,7 @@ impl Chip8 {
             self.reg_pc += 2;
         } else if opcode & 0xFFFF == 0x00EE {
             // 0x00EE (return from subroutine)
-            match u16::checked_sub(self.reg_sp, 1) {
+            match u8::checked_sub(self.reg_sp, 1) {
                 Some(sp) => self.reg_sp = sp,
                 None => panic!("Stack underflow."),
             }
@@ -66,6 +66,9 @@ impl Chip8 {
             self.reg_pc = opcode & 0x0FFF;
         } else if opcode & 0xF000 == 0x2000 {
             // 0x2NNN (call subroutine)
+            if self.reg_sp >= STACK_SIZE as u8 {
+                panic!("Stack overflow.")
+            }
             self.stack[self.reg_sp as usize] = self.reg_pc;
             self.reg_sp += 1;
             self.reg_pc = opcode & 0x0FFF;
@@ -263,6 +266,7 @@ const PROG_END: usize = 0xEA0;
 const SPRITE_COUNT: usize = 16;
 const SPRITE_START: usize = 0;
 const SPRITE_WIDTH: usize = 5;
+const STACK_SIZE: usize = 16;
 
 #[cfg(test)]
 mod tests {
@@ -307,6 +311,28 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc, 0x202);
         assert_eq!(chip8.display, [false; 64 * 32]);
+    }
+
+    #[test]
+    fn calls_subroutine() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x22;
+        chip8.memory[PROG_START + 1] = 0x38;
+        chip8.reg_sp = 15;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x238);
+        assert_eq!(chip8.reg_sp, 16);
+        assert_eq!(chip8.stack[15] as usize, PROG_START);
+    }
+
+    #[test]
+    #[should_panic(expected = "Stack overflow.")]
+    fn prevents_stack_overflow() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x22;
+        chip8.memory[PROG_START + 1] = 0x38;
+        chip8.reg_sp = 16;
+        chip8.cycle();
     }
 
     #[test]
