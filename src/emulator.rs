@@ -281,7 +281,13 @@ impl Chip8 {
             self.reg_v[index] = self.reg_timer_delay;
             self.reg_pc += 2;
         } else if opcode & 0xF0FF == 0xF00A {
-            todo!("FX0A")
+            // 0xFX0A (vx := key)
+            let active_key = self.keyboard.iter().enumerate().find(|key| *key.1);
+            if active_key.is_some() {
+                let index = ((opcode & 0x0F00) >> 8) as usize;
+                self.reg_v[index] = active_key.unwrap().0 as u8;
+                self.reg_pc += 2;
+            }
         } else if opcode & 0xF0FF == 0xF015 {
             // 0xFX15 (delay := vx)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -925,6 +931,19 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_v[4], 8)
+    }
+
+    #[test]
+    fn wait_for_key() {
+        let mut chip8 = get_emulator();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x0A;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START);
+        chip8.keyboard[10] = true;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_v[4], 10)
     }
 
     #[test]
