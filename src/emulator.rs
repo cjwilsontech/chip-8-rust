@@ -14,7 +14,7 @@ pub struct Chip8 {
     stack: [u16; STACK_SIZE],
     memory: [u8; 4096],
     keyboard: [bool; 16],
-    pub display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+    display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
 
     redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> (),
 }
