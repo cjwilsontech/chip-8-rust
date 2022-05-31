@@ -242,6 +242,11 @@ impl Chip8 {
                 self.reg_pc += 2;
             }
             self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xF007 {
+            // FX07 (vx := delay)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            self.reg_v[index] = self.reg_timer_delay;
+            self.reg_pc += 2;
         } else if opcode & 0xF0FF == 0xF015 {
             // 0xFX15 (delay := vx)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -874,5 +879,16 @@ mod tests {
         chip8.reg_v[0] = 5;
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, 0x0F37);
+    }
+
+    #[test]
+    fn set_vx_delay() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x07;
+        chip8.reg_timer_delay = 8;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_v[4], 8)
     }
 }
