@@ -52,8 +52,14 @@ impl Chip8 {
             self.reg_pc += 2;
         } else if opcode & 0xFFFF == 0x00EE {
             // 0x00EE (return from subroutine)
-            self.reg_sp -= 1;
-            self.reg_pc = self.stack[self.reg_sp as usize];
+            match u16::checked_sub(self.reg_sp, 1) {
+                Some(sp) => self.reg_sp = sp,
+                None => panic!("Stack underflow."),
+            }
+            self.reg_pc = *self
+                .stack
+                .get(self.reg_sp as usize)
+                .expect("Stack underflow.");
             self.reg_pc += 2;
         } else if opcode & 0xF000 == 0x1000 {
             // 0x1NNN (jump)
@@ -301,6 +307,28 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc, 0x202);
         assert_eq!(chip8.display, [false; 64 * 32]);
+    }
+
+    #[test]
+    fn returns_from_subroutine() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x00;
+        chip8.memory[PROG_START + 1] = 0xEE;
+        chip8.stack[1] = 0x2F8;
+        chip8.reg_sp = 2;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc, 0x2FA);
+        assert_eq!(chip8.reg_sp, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Stack underflow.")]
+    fn prevents_stack_underflow() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0x00;
+        chip8.memory[PROG_START + 1] = 0xEE;
+        chip8.reg_sp = 0;
+        chip8.cycle();
     }
 
     #[test]
