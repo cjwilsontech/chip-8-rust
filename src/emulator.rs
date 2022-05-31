@@ -1,5 +1,8 @@
 use rand::Rng;
 
+pub const DISPLAY_WIDTH: usize = 64;
+pub const DISPLAY_HEIGHT: usize = 32;
+
 pub struct Chip8 {
     reg_pc: u16,
     reg_sp: u8,
@@ -11,11 +14,13 @@ pub struct Chip8 {
     stack: [u16; STACK_SIZE],
     memory: [u8; 4096],
     keyboard: [bool; 16],
-    display: [bool; 64 * 32],
+    pub display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+
+    redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> (),
 }
 
 impl Chip8 {
-    pub fn new() -> Chip8 {
+    pub fn new(redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> ()) -> Chip8 {
         Chip8 {
             reg_pc: PROG_START as u16,
             reg_sp: 0,
@@ -27,7 +32,9 @@ impl Chip8 {
             stack: [0; STACK_SIZE],
             memory: initialize_memory(),
             keyboard: [false; 16],
-            display: [false; 64 * 32],
+            display: [false; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+
+            redraw,
         }
     }
 
@@ -48,7 +55,7 @@ impl Chip8 {
 
         if opcode & 0xFFFF == 0x00E0 {
             // 0x00E0 (clear the screen)
-            self.display = [false; 64 * 32];
+            self.display = [false; DISPLAY_WIDTH * DISPLAY_HEIGHT];
             self.reg_pc += 2;
         } else if opcode & 0xFFFF == 0x00EE {
             // 0x00EE (return from subroutine)
@@ -218,6 +225,32 @@ impl Chip8 {
             let mask = (opcode & 0xFF) as u8;
             self.reg_v[index] = rng.gen::<u8>() & mask;
             self.reg_pc += 2;
+        } else if opcode & 0xF000 == 0xD000 {
+            // 0xDXYN (sprite vx vy N)
+            let index_x = ((opcode & 0x0F00) >> 8) as usize;
+            let index_y = ((opcode & 0x00F0) >> 4) as usize;
+            let byte_count = (opcode & 0x0F) as usize;
+            let vx_value = *self.reg_v.get(index_x).expect("V index to be in bounds.") as usize;
+            let vy_value = *self.reg_v.get(index_y).expect("V index to be in bounds.") as usize;
+
+            self.reg_v[15] = 0;
+            for row in 0..byte_count {
+                for col in 0..8 {
+                    let index = DISPLAY_WIDTH * (vy_value + row as usize) + vx_value + col;
+                    let value =
+                        self.memory[self.reg_i as usize + row] & u8::pow(2, 7 - col as u32) != 0;
+
+                    // If any set pixels are changed to unset, set VF to 1.
+                    if self.display[index] && !value {
+                        self.reg_v[15] = 1;
+                    }
+
+                    self.display[index] = value;
+                }
+            }
+
+            self.reg_pc += 2;
+            (self.redraw)(&self.display);
         } else if opcode & 0xF0FF == 0xE09E {
             // 0xEX9E (if vx -key then)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -247,6 +280,8 @@ impl Chip8 {
             let index = ((opcode & 0x0F00) >> 8) as usize;
             self.reg_v[index] = self.reg_timer_delay;
             self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xF00A {
+            todo!("FX0A")
         } else if opcode & 0xF0FF == 0xF015 {
             // 0xFX15 (delay := vx)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -270,7 +305,7 @@ impl Chip8 {
             if value > 15 {
                 panic!("Vx to be within the range 0-15.");
             }
-            self.reg_i = SPRITE_START as u16 + value * SPRITE_WIDTH as u16;
+            self.reg_i = SPRITE_START as u16 + value * SPRITE_BYTE_WIDTH as u16;
             self.reg_pc += 2;
         } else if opcode & 0xF0FF == 0xF033 {
             // 0xFX33 (bcd vx)
@@ -302,7 +337,7 @@ impl Chip8 {
             }
             self.reg_pc += 2;
         } else {
-            todo!("Unknown opcode: {:#X}", opcode);
+            panic!("Unknown opcode: {:#X}", opcode);
         }
     }
 }
@@ -334,7 +369,7 @@ fn initialize_memory() -> [u8; 4096] {
     memory
 }
 
-const ALL_SPRITE_DATA: [u8; SPRITE_WIDTH * SPRITE_COUNT] = [
+const ALL_SPRITE_DATA: [u8; SPRITE_BYTE_WIDTH * SPRITE_COUNT] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // Zero
     0x20, 0x60, 0x20, 0x20, 0x70, // One
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // Two
@@ -356,27 +391,27 @@ const PROG_START: usize = 0x200;
 const PROG_END: usize = 0xEA0;
 const SPRITE_COUNT: usize = 16;
 const SPRITE_START: usize = 0;
-const SPRITE_WIDTH: usize = 5;
+const SPRITE_BYTE_WIDTH: usize = 5;
 const STACK_SIZE: usize = 16;
 
 #[cfg(test)]
 mod tests {
     use crate::emulator::SPRITE_START;
 
-    use super::{get_opcode, Chip8, PROG_END, PROG_START};
+    use super::{get_opcode, Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, PROG_END, PROG_START};
 
     #[test]
     fn can_get_opcode() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[chip8.reg_pc as usize] = 0xF8;
         chip8.memory[(chip8.reg_pc + 1) as usize] = 0x32;
         let opcode = get_opcode(&chip8.memory, chip8.reg_pc);
-        assert_eq!(opcode, 0xF832)
+        assert_eq!(opcode, 0xF832);
     }
 
     #[test]
     fn loads_rom_data() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         let data = vec![1; 3232];
         chip8.load(data).unwrap();
         assert_eq!(chip8.memory[PROG_START - 1], 0);
@@ -388,14 +423,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "ROM data is too large for memory.")]
     fn prevents_rom_overflow() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         let data = vec![1; 3233];
         chip8.load(data).unwrap();
     }
 
     #[test]
     fn clear() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x00;
         chip8.memory[PROG_START + 1] = 0xE0;
         chip8.display = [true; 64 * 32];
@@ -406,7 +441,7 @@ mod tests {
 
     #[test]
     fn calls_subroutine() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x22;
         chip8.memory[PROG_START + 1] = 0x38;
         chip8.reg_sp = 15;
@@ -419,7 +454,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Stack overflow.")]
     fn prevents_stack_overflow() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x22;
         chip8.memory[PROG_START + 1] = 0x38;
         chip8.reg_sp = 16;
@@ -428,7 +463,7 @@ mod tests {
 
     #[test]
     fn returns_from_subroutine() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x00;
         chip8.memory[PROG_START + 1] = 0xEE;
         chip8.stack[1] = 0x2F8;
@@ -441,7 +476,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Stack underflow.")]
     fn prevents_stack_underflow() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x00;
         chip8.memory[PROG_START + 1] = 0xEE;
         chip8.reg_sp = 0;
@@ -450,7 +485,7 @@ mod tests {
 
     #[test]
     fn jump() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x1A;
         chip8.memory[PROG_START + 1] = 0xF8;
         chip8.memory[0x0AF8] = 1;
@@ -461,7 +496,7 @@ mod tests {
 
     #[test]
     fn set_register_to_const() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x63;
         chip8.memory[PROG_START + 1] = 0x64;
         chip8.cycle();
@@ -471,7 +506,7 @@ mod tests {
 
     #[test]
     fn set_i_to_const() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xA3;
         chip8.memory[PROG_START + 1] = 0x64;
         chip8.cycle();
@@ -481,7 +516,7 @@ mod tests {
 
     #[test]
     fn enter_and_exit_subroutine() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x23;
         chip8.memory[PROG_START + 1] = 0x64;
         chip8.memory[0x364] = 0x00;
@@ -497,7 +532,7 @@ mod tests {
 
     #[test]
     fn check_key_pressed() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xE4;
         chip8.memory[PROG_START + 1] = 0x9E;
         chip8.memory[PROG_START + 2] = 0xE3;
@@ -520,7 +555,7 @@ mod tests {
 
     #[test]
     fn set_delay_timer() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x15;
         chip8.reg_v[4] = 60;
@@ -531,7 +566,7 @@ mod tests {
 
     #[test]
     fn set_sound_timer() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x18;
         chip8.reg_v[4] = 60;
@@ -542,7 +577,7 @@ mod tests {
 
     #[test]
     fn v_not_equals_const() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x34;
         chip8.memory[PROG_START + 1] = 0x18;
         chip8.memory[PROG_START + 4] = 0x34;
@@ -556,7 +591,7 @@ mod tests {
 
     #[test]
     fn v_equals_const() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x44;
         chip8.memory[PROG_START + 1] = 0x18;
         chip8.memory[PROG_START + 2] = 0x44;
@@ -570,7 +605,7 @@ mod tests {
 
     #[test]
     fn vx_equals_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x54;
         chip8.memory[PROG_START + 1] = 0x30;
         chip8.memory[PROG_START + 4] = 0x54;
@@ -586,7 +621,7 @@ mod tests {
 
     #[test]
     fn vx_not_equals_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x94;
         chip8.memory[PROG_START + 1] = 0x30;
         chip8.memory[PROG_START + 2] = 0x94;
@@ -602,7 +637,7 @@ mod tests {
 
     #[test]
     fn generate_random() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xC4;
         chip8.memory[PROG_START + 1] = 0xFF;
         chip8.cycle();
@@ -611,7 +646,7 @@ mod tests {
 
     #[test]
     fn bcd() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x33;
         chip8.reg_v[4] = 245;
@@ -627,7 +662,7 @@ mod tests {
 
     #[test]
     fn save_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF3;
         chip8.memory[PROG_START + 1] = 0x55;
         chip8.reg_v[0] = 245;
@@ -649,7 +684,7 @@ mod tests {
 
     #[test]
     fn load_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF3;
         chip8.memory[PROG_START + 1] = 0x65;
         chip8.reg_i = 0x2F0;
@@ -671,7 +706,7 @@ mod tests {
 
     #[test]
     fn add_vx_to_i() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x1E;
         chip8.reg_i = 0x2F0;
@@ -684,7 +719,7 @@ mod tests {
 
     #[test]
     fn add_const_to_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x74;
         chip8.memory[PROG_START + 1] = 0x05;
         chip8.reg_v[4] = 3;
@@ -695,7 +730,7 @@ mod tests {
 
     #[test]
     fn set_i_to_sprite_for_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x29;
         chip8.reg_v[4] = 12;
@@ -713,7 +748,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Vx to be within the range 0-15.")]
     fn set_i_to_sprite_for_invalid_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x29;
         chip8.reg_v[4] = 17;
@@ -722,7 +757,7 @@ mod tests {
 
     #[test]
     fn set_vx_to_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x50;
         chip8.reg_v[5] = 17;
@@ -733,7 +768,7 @@ mod tests {
 
     #[test]
     fn set_vx_to_or_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x51;
         chip8.reg_v[4] = 0b1010;
@@ -745,7 +780,7 @@ mod tests {
 
     #[test]
     fn set_vx_to_and_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x52;
         chip8.reg_v[4] = 0b1010;
@@ -757,7 +792,7 @@ mod tests {
 
     #[test]
     fn set_vx_to_xor_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x53;
         chip8.reg_v[4] = 0b1010;
@@ -769,7 +804,7 @@ mod tests {
 
     #[test]
     fn add_vx_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x54;
         chip8.reg_v[4] = 1;
@@ -782,7 +817,7 @@ mod tests {
 
     #[test]
     fn add_vx_vy_carry() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x54;
         chip8.reg_v[4] = 255;
@@ -795,7 +830,7 @@ mod tests {
 
     #[test]
     fn sub_vx_vy() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x55;
         chip8.reg_v[4] = 4;
@@ -808,7 +843,7 @@ mod tests {
 
     #[test]
     fn sub_vx_vy_borrow() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x55;
         chip8.reg_v[4] = 100;
@@ -821,7 +856,7 @@ mod tests {
 
     #[test]
     fn shift_right() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x56;
         chip8.reg_v[5] = 0b1001_1111;
@@ -834,7 +869,7 @@ mod tests {
 
     #[test]
     fn shift_left() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x5E;
         chip8.reg_v[5] = 0b1001_1111;
@@ -847,7 +882,7 @@ mod tests {
 
     #[test]
     fn sub_vy_vx() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x57;
         chip8.reg_v[4] = 2;
@@ -860,7 +895,7 @@ mod tests {
 
     #[test]
     fn sub_vy_vx_borrow() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0x84;
         chip8.memory[PROG_START + 1] = 0x57;
         chip8.reg_v[4] = 255;
@@ -873,7 +908,7 @@ mod tests {
 
     #[test]
     fn jump0() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xBF;
         chip8.memory[PROG_START + 1] = 0x32;
         chip8.reg_v[0] = 5;
@@ -883,7 +918,7 @@ mod tests {
 
     #[test]
     fn set_vx_delay() {
-        let mut chip8 = Chip8::new();
+        let mut chip8 = get_emulator();
         chip8.memory[PROG_START] = 0xF4;
         chip8.memory[PROG_START + 1] = 0x07;
         chip8.reg_timer_delay = 8;
@@ -891,4 +926,58 @@ mod tests {
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_v[4], 8)
     }
+
+    #[test]
+    fn draw_sprite() {
+        let mut chip8 = get_emulator();
+        chip8.memory[PROG_START] = 0xD4;
+        chip8.memory[PROG_START + 1] = 0x55;
+        chip8.memory[PROG_START + 2] = 0xD4;
+        chip8.memory[PROG_START + 3] = 0x55;
+        chip8.reg_v[4] = 5;
+        chip8.reg_v[5] = 10;
+        chip8.reg_i = SPRITE_START as u16 + 5;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_v[15], 0);
+        chip8.reg_i = SPRITE_START as u16;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 4);
+        assert_eq!(chip8.reg_v[15], 1);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 4], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 5], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 6], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 7], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 8], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 9], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 4], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 5], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 6], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 7], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 8], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 9], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 4], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 5], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 6], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 7], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 8], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 9], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 4], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 5], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 6], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 7], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 8], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 9], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 4], false);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 5], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 6], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 7], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 8], true);
+        assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 9], false);
+    }
+
+    fn get_emulator() -> Chip8 {
+        Chip8::new(draw_screen)
+    }
+    fn draw_screen(_: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {}
 }
