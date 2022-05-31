@@ -207,6 +207,10 @@ impl Chip8 {
             // 0xANNN (i := NNN)
             self.reg_i = opcode & 0x0FFF;
             self.reg_pc += 2;
+        } else if opcode & 0xF000 == 0xB000 {
+            // 0xBNNN (jump0 NNN)
+            let value = opcode & 0x0FFF;
+            self.reg_pc = value + self.reg_v[0] as u16;
         } else if opcode & 0xF000 == 0xC000 {
             // 0xCXNN (vx := random NN)
             let mut rng = rand::thread_rng();
@@ -860,5 +864,15 @@ mod tests {
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_v[4], 101);
         assert_eq!(chip8.reg_v[15], 1)
+    }
+
+    #[test]
+    fn jump0() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xBF;
+        chip8.memory[PROG_START + 1] = 0x32;
+        chip8.reg_v[0] = 5;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, 0x0F37);
     }
 }
