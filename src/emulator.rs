@@ -1,8 +1,5 @@
 use rand::Rng;
 
-const PROG_START: usize = 0x200;
-const PROG_END: usize = 0xEA0;
-
 pub struct Chip8 {
     reg_pc: u16,
     reg_sp: u16,
@@ -28,7 +25,7 @@ impl Chip8 {
             reg_v: [0; 16],
 
             stack: [0; 16],
-            memory: [0; 4096],
+            memory: initialize_memory(),
             keyboard: [false; 16],
             display: [false; 64 * 32],
         }
@@ -166,6 +163,15 @@ impl Chip8 {
             let value = *self.reg_v.get(index).expect("V index to be in bounds.") as u16;
             self.reg_i += value;
             self.reg_pc += 2;
+        } else if opcode & 0xF0FF == 0xF029 {
+            // 0xFX29 (i := hex vx)
+            let index = ((opcode & 0x0F00) >> 8) as usize;
+            let value = *self.reg_v.get(index).expect("V index to be in bounds.") as u16;
+            if value > 15 {
+                panic!("Vx to be within the range 0-15.");
+            }
+            self.reg_i = SPRITE_START as u16 + value * SPRITE_WIDTH as u16;
+            self.reg_pc += 2;
         } else if opcode & 0xF0FF == 0xF033 {
             // 0xFX33 (bcd vx)
             let index = ((opcode & 0x0F00) >> 8) as usize;
@@ -217,8 +223,45 @@ fn get_opcode(memory: &[u8; 4096], pc: u16) -> u16 {
     big | little
 }
 
+fn initialize_memory() -> [u8; 4096] {
+    let mut memory = [0; 4096];
+
+    // Set sprite data.
+    for (index, data) in ALL_SPRITE_DATA.into_iter().enumerate() {
+        memory[SPRITE_START + index] = data;
+    }
+
+    memory
+}
+
+const ALL_SPRITE_DATA: [u8; SPRITE_WIDTH * SPRITE_COUNT] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // Zero
+    0x20, 0x60, 0x20, 0x20, 0x70, // One
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // Two
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // Three
+    0x90, 0x90, 0xF0, 0x10, 0x10, // Four
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // Five
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // Six
+    0xF0, 0x10, 0x20, 0x40, 0x40, // Seven
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // Eight
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // Nine
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+const PROG_START: usize = 0x200;
+const PROG_END: usize = 0xEA0;
+const SPRITE_COUNT: usize = 16;
+const SPRITE_START: usize = 0;
+const SPRITE_WIDTH: usize = 5;
+
 #[cfg(test)]
 mod tests {
+    use crate::emulator::SPRITE_START;
+
     use super::{get_opcode, Chip8, PROG_END, PROG_START};
 
     #[test]
@@ -503,5 +546,32 @@ mod tests {
         chip8.cycle();
         assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
         assert_eq!(chip8.reg_v[4], 8);
+    }
+
+    #[test]
+    fn set_i_to_sprite_for_vx() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x29;
+        chip8.reg_v[4] = 12;
+        chip8.cycle();
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 2);
+        assert_eq!(chip8.reg_v[4], 12);
+        assert_eq!(chip8.reg_i, (SPRITE_START + 60) as u16);
+        assert_eq!(chip8.memory[chip8.reg_i as usize], 0xF0);
+        assert_eq!(chip8.memory[chip8.reg_i as usize + 1], 0x80);
+        assert_eq!(chip8.memory[chip8.reg_i as usize + 2], 0x80);
+        assert_eq!(chip8.memory[chip8.reg_i as usize + 3], 0x80);
+        assert_eq!(chip8.memory[chip8.reg_i as usize + 4], 0xF0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Vx to be within the range 0-15.")]
+    fn set_i_to_sprite_for_invalid_vx() {
+        let mut chip8 = Chip8::new();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x29;
+        chip8.reg_v[4] = 17;
+        chip8.cycle();
     }
 }
