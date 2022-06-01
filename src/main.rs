@@ -1,13 +1,25 @@
-use std::{env, fs};
+use std::{env, fs, io::stdout};
 
-use emulator::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
-
-use crate::emulator::Chip8;
+use crossterm::{
+    cursor,
+    terminal::{self, ClearType},
+    ExecutableCommand,
+};
+use emulator::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 mod emulator;
 
 fn main() {
+    stdout()
+        .execute(terminal::Clear(ClearType::All))
+        .unwrap()
+        .execute(cursor::MoveTo(0, 0))
+        .unwrap();
+
     println!("CHIP-8");
+    stdout()
+        .execute(cursor::SavePosition)
+        .expect("To save cursor position.");
 
     let args: Vec<String> = env::args().collect();
     let rom_path = args.get(1).expect("Expected a path to the ROM to open.");
@@ -25,6 +37,9 @@ fn main() {
 }
 
 fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
+    stdout()
+        .execute(cursor::RestorePosition)
+        .expect("To restore cursor position.");
     for row in 0..DISPLAY_HEIGHT {
         for col in 0..DISPLAY_WIDTH {
             print!(
@@ -38,4 +53,5 @@ fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
         }
         println!();
     }
+    println!();
 }
