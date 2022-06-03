@@ -1,4 +1,5 @@
-use std::{env, fs, io::stdout};
+use core::time;
+use std::{env, fs, io::stdout, thread};
 
 use crossterm::{
     cursor,
@@ -8,6 +9,8 @@ use crossterm::{
 use emulator::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 mod emulator;
+
+const CLOCK_RATE: u32 = 500;
 
 fn main() {
     stdout()
@@ -31,8 +34,10 @@ fn main() {
         panic!("Error loading data: {}", load_rom_result.unwrap_err());
     }
 
+    let thread_sleep_duration = time::Duration::from_secs(1) / CLOCK_RATE;
     loop {
         emulator.cycle();
+        thread::sleep(thread_sleep_duration);
     }
 }
 
