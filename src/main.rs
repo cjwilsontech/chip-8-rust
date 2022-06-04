@@ -35,8 +35,23 @@ fn main() {
     }
 
     let thread_sleep_duration = time::Duration::from_secs(1) / CLOCK_RATE;
+
+    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+    sink.pause();
+    sink.append(rodio::source::SineWave::new(400.0));
+
     loop {
         emulator.cycle();
+
+        if emulator.should_play_sound() {
+            if sink.is_paused() {
+                sink.play();
+            }
+        } else if !sink.is_paused() {
+            sink.pause();
+        }
+
         thread::sleep(thread_sleep_duration);
     }
 }
