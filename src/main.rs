@@ -90,11 +90,14 @@ fn poll_for_keyboard_input(
     keyboard_mapping: &HashMap<KeyCode, usize>,
     duration: Duration,
 ) -> Result<(), ()> {
+    // Set raw mode so we can detect input without requiring Enter to be pressed.
     terminal::enable_raw_mode().expect("To enable raw mode.");
-    let start = Instant::now();
 
-    while Instant::now().duration_since(start) < duration {
-        if event::poll(duration).expect("Failed to poll.") {
+    let start = Instant::now();
+    let mut duration_since_start = Instant::now().duration_since(start);
+
+    while duration_since_start < duration {
+        if event::poll(duration - duration_since_start).expect("Failed to poll.") {
             if let Event::Key(event) = event::read().expect("Failed to read line.") {
                 // Check for key combinations for terminating the application.
                 if (event.code == KeyCode::Char('c') || event.code == KeyCode::Char('z'))
@@ -110,6 +113,8 @@ fn poll_for_keyboard_input(
                 }
             };
         }
+
+        duration_since_start = Instant::now().duration_since(start);
     }
 
     terminal::disable_raw_mode().expect("To disable raw mode.");
