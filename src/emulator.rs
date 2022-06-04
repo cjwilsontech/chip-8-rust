@@ -1,3 +1,5 @@
+use std::time;
+
 use rand::Rng;
 
 pub const DISPLAY_WIDTH: usize = 64;
@@ -15,6 +17,8 @@ pub struct Chip8 {
     memory: [u8; 4096],
     keyboard: [bool; 16],
     display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+    timer_start: time::Instant,
+    timer_duration: time::Duration,
 
     redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> (),
 }
@@ -33,6 +37,8 @@ impl Chip8 {
             memory: initialize_memory(),
             keyboard: [false; 16],
             display: [false; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+            timer_start: time::Instant::now(),
+            timer_duration: time::Duration::from_secs(1) / TIMER_CLOCK,
 
             redraw,
         }
@@ -51,6 +57,7 @@ impl Chip8 {
     }
 
     pub fn cycle(&mut self) {
+        self.process_timers();
         let opcode = get_opcode(&self.memory, self.reg_pc);
 
         if opcode & 0xFFFF == 0x00E0 {
@@ -346,6 +353,19 @@ impl Chip8 {
             panic!("Unknown opcode: {:#X}", opcode);
         }
     }
+
+    pub fn should_play_sound(&self) -> bool {
+        self.reg_timer_sound > 1
+    }
+
+    fn process_timers(&mut self) {
+        let now = time::Instant::now();
+        if now.saturating_duration_since(self.timer_start) >= self.timer_duration {
+            self.reg_timer_delay = u8::saturating_sub(self.reg_timer_delay, 1);
+            self.reg_timer_sound = u8::saturating_sub(self.reg_timer_sound, 1);
+            self.timer_start = now;
+        }
+    }
 }
 
 fn get_opcode(memory: &[u8; 4096], pc: u16) -> u16 {
@@ -399,9 +419,12 @@ const SPRITE_COUNT: usize = 16;
 const SPRITE_START: usize = 0;
 const SPRITE_BYTE_WIDTH: usize = 5;
 const STACK_SIZE: usize = 16;
+const TIMER_CLOCK: u32 = 60;
 
 #[cfg(test)]
 mod tests {
+    use std::{thread, time};
+
     use crate::emulator::SPRITE_START;
 
     use super::{get_opcode, Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, PROG_END, PROG_START};
@@ -993,6 +1016,28 @@ mod tests {
         assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 7], true);
         assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 8], true);
         assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 9], false);
+    }
+
+    #[test]
+    fn decrements_timers() {
+        let mut chip8 = get_emulator();
+        chip8.memory[PROG_START] = 0xF4;
+        chip8.memory[PROG_START + 1] = 0x15;
+        chip8.memory[PROG_START + 2] = 0xF4;
+        chip8.memory[PROG_START + 3] = 0x18;
+        chip8.memory[PROG_START + 4] = 0x12;
+        chip8.memory[PROG_START + 5] = 0x04;
+        chip8.reg_v[4] = 30;
+        chip8.cycle();
+        assert_eq!(chip8.reg_timer_delay, 30);
+        chip8.cycle();
+        assert_eq!(chip8.reg_timer_sound, 30);
+        assert_eq!(chip8.reg_pc as usize, PROG_START + 4);
+        let sleep_duration = time::Duration::from_secs(1) / 60;
+        thread::sleep(sleep_duration);
+        chip8.cycle();
+        assert_eq!(chip8.reg_timer_delay, 29);
+        assert_eq!(chip8.reg_timer_sound, 29);
     }
 
     fn get_emulator() -> Chip8 {
