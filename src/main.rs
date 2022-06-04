@@ -1,8 +1,14 @@
 use core::time;
-use std::{env, fs, io::stdout, thread};
+use std::{
+    collections::HashMap,
+    env, fs,
+    io::stdout,
+    time::{Duration, Instant},
+};
 
 use crossterm::{
     cursor,
+    event::{self, Event, KeyCode},
     terminal::{self, ClearType},
     ExecutableCommand,
 };
@@ -23,6 +29,25 @@ fn main() {
     stdout()
         .execute(cursor::SavePosition)
         .expect("To save cursor position.");
+
+    let keyboard_mapping = HashMap::from([
+        (KeyCode::Char('1'), 0),
+        (KeyCode::Char('2'), 1),
+        (KeyCode::Char('3'), 2),
+        (KeyCode::Char('4'), 3),
+        (KeyCode::Char('q'), 4),
+        (KeyCode::Char('w'), 5),
+        (KeyCode::Char('e'), 6),
+        (KeyCode::Char('r'), 7),
+        (KeyCode::Char('a'), 8),
+        (KeyCode::Char('s'), 9),
+        (KeyCode::Char('d'), 10),
+        (KeyCode::Char('f'), 11),
+        (KeyCode::Char('z'), 12),
+        (KeyCode::Char('x'), 13),
+        (KeyCode::Char('c'), 14),
+        (KeyCode::Char('v'), 15),
+    ]);
 
     let args: Vec<String> = env::args().collect();
     let rom_path = args.get(1).expect("Expected a path to the ROM to open.");
@@ -52,8 +77,43 @@ fn main() {
             sink.pause();
         }
 
-        thread::sleep(thread_sleep_duration);
+        emulator.clear_keyboard();
+        if poll_for_keyboard_input(&mut emulator, &keyboard_mapping, thread_sleep_duration).is_err()
+        {
+            break;
+        }
     }
+}
+
+fn poll_for_keyboard_input(
+    emulator: &mut Chip8,
+    keyboard_mapping: &HashMap<KeyCode, usize>,
+    duration: Duration,
+) -> Result<(), ()> {
+    terminal::enable_raw_mode().expect("To enable raw mode.");
+    let start = Instant::now();
+
+    while Instant::now().duration_since(start) < duration {
+        if event::poll(duration).expect("Failed to poll.") {
+            if let Event::Key(event) = event::read().expect("Failed to read line.") {
+                // Check for key combinations for terminating the application.
+                if (event.code == KeyCode::Char('c') || event.code == KeyCode::Char('z'))
+                    && event.modifiers == event::KeyModifiers::CONTROL
+                {
+                    terminal::disable_raw_mode().expect("To disable raw mode.");
+                    return Err(());
+                }
+
+                let index = keyboard_mapping.get(&event.code);
+                if index.is_some() {
+                    emulator.set_keyboard_key(*index.unwrap(), true);
+                }
+            };
+        }
+    }
+
+    terminal::disable_raw_mode().expect("To disable raw mode.");
+    Ok(())
 }
 
 fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {

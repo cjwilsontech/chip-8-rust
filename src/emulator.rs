@@ -358,6 +358,17 @@ impl Chip8 {
         self.reg_timer_sound > 1
     }
 
+    pub fn set_keyboard_key(&mut self, index: usize, is_pressed: bool) {
+        if index > 15 {
+            panic!("Expected index to be <= 15");
+        }
+        self.keyboard[index] = is_pressed;
+    }
+
+    pub fn clear_keyboard(&mut self) {
+        self.keyboard = [false; 16];
+    }
+
     fn process_timers(&mut self) {
         let now = time::Instant::now();
         if now.saturating_duration_since(self.timer_start) >= self.timer_duration {
