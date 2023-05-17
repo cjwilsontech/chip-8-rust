@@ -243,7 +243,8 @@ impl Chip8 {
             self.reg_v[15] = 0;
             for row in 0..byte_count {
                 for col in 0..8 {
-                    let index = DISPLAY_WIDTH * (vy_value + row as usize) + vx_value + col;
+                    let index = (DISPLAY_WIDTH * (vy_value + row as usize) + vx_value + col)
+                        % (DISPLAY_WIDTH * DISPLAY_HEIGHT);
                     let value =
                         self.memory[self.reg_i as usize + row] & u8::pow(2, 7 - col as u32) != 0;
 
