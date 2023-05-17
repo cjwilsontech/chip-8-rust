@@ -124,7 +124,10 @@ fn poll_for_keyboard_input(
 fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
     stdout()
         .execute(cursor::RestorePosition)
-        .expect("To restore cursor position.");
+        .expect("To restore cursor position.")
+        .execute(cursor::Hide)
+        .unwrap();
+
     for row in 0..DISPLAY_HEIGHT {
         for col in 0..DISPLAY_WIDTH {
             print!(
@@ -139,4 +142,6 @@ fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
         println!();
     }
     println!();
+
+    stdout().execute(cursor::Show).unwrap();
 }
