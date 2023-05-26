@@ -4,6 +4,7 @@ use rand::Rng;
 
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
+pub type Display = [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT];
 
 pub struct Chip8 {
     reg_pc: u16,
@@ -16,15 +17,15 @@ pub struct Chip8 {
     stack: [u16; STACK_SIZE],
     memory: [u8; 4096],
     keyboard: [bool; 16],
-    display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+    display: Display,
     timer_start: time::Instant,
     timer_duration: time::Duration,
 
-    redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> (),
+    redraw: fn(&Display) -> (),
 }
 
 impl Chip8 {
-    pub fn new(redraw: fn(&[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) -> ()) -> Chip8 {
+    pub fn new(redraw: fn(&Display) -> ()) -> Chip8 {
         Chip8 {
             reg_pc: PROG_START as u16,
             reg_sp: 0,
@@ -36,7 +37,7 @@ impl Chip8 {
             stack: [0; STACK_SIZE],
             memory: initialize_memory(),
             keyboard: [false; 16],
-            display: [false; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+            display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
             timer_start: time::Instant::now(),
             timer_duration: time::Duration::from_secs(1) / TIMER_CLOCK,
 
@@ -62,7 +63,11 @@ impl Chip8 {
 
         if opcode & 0xFFFF == 0x00E0 {
             // 0x00E0 (clear the screen)
-            self.display = [false; DISPLAY_WIDTH * DISPLAY_HEIGHT];
+            for row in 0..DISPLAY_HEIGHT {
+                for col in 0..DISPLAY_WIDTH {
+                    self.display[row][col] = false;
+                }
+            }
             self.reg_pc += 2;
         } else if opcode & 0xFFFF == 0x00EE {
             // 0x00EE (return from subroutine)
@@ -242,18 +247,21 @@ impl Chip8 {
 
             self.reg_v[15] = 0;
             for row in 0..byte_count {
+                let y = (vy_value + row) % DISPLAY_HEIGHT;
                 for col in 0..8 {
-                    let index = (DISPLAY_WIDTH * (vy_value + row as usize) + vx_value + col)
-                        % (DISPLAY_WIDTH * DISPLAY_HEIGHT);
-                    let value =
-                        self.memory[self.reg_i as usize + row] & u8::pow(2, 7 - col as u32) != 0;
+                    let x = (vx_value + col) % DISPLAY_WIDTH;
 
-                    // If any set pixels are changed to unset, set VF to 1.
-                    if self.display[index] && !value {
+                    // The pixel we should show will be the XOR'd value of the current display pixel and the bit in memory.
+                    let value = self.display[y][x]
+                        ^ ((self.memory[self.reg_i as usize + row] & u8::pow(2, 7 - col as u32))
+                            != 0);
+
+                    // If a pixel was erased, set VF to 1.
+                    if self.display[y][x] && !value {
                         self.reg_v[15] = 1;
                     }
 
-                    self.display[index] = value;
+                    self.display[y][x] = value;
                 }
             }
 

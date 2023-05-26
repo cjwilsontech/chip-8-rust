@@ -12,7 +12,7 @@ use crossterm::{
     terminal::{self, ClearType},
     ExecutableCommand,
 };
-use emulator::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use emulator::{Chip8, Display, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 mod emulator;
 
@@ -121,7 +121,7 @@ fn poll_for_keyboard_input(
     Ok(())
 }
 
-fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
+fn draw_screen(display: &Display) {
     stdout()
         .execute(cursor::RestorePosition)
         .expect("To restore cursor position.")
@@ -130,14 +130,7 @@ fn draw_screen(display: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {
 
     for row in 0..DISPLAY_HEIGHT {
         for col in 0..DISPLAY_WIDTH {
-            print!(
-                "{}",
-                if display[row * DISPLAY_WIDTH + col] {
-                    '\u{2588}'
-                } else {
-                    ' '
-                }
-            );
+            print!("{}", if display[row][col] { '\u{2588}' } else { ' ' });
         }
         println!();
     }
