@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     env, fs,
     io::stdout,
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -25,11 +26,6 @@ fn main() {
         .execute(cursor::MoveTo(0, 0))
         .unwrap();
 
-    println!("CHIP-8");
-    stdout()
-        .execute(cursor::SavePosition)
-        .expect("To save cursor position.");
-
     let keyboard_mapping = HashMap::from([
         (KeyCode::Char('1'), 0),
         (KeyCode::Char('2'), 1),
@@ -50,8 +46,16 @@ fn main() {
     ]);
 
     let args: Vec<String> = env::args().collect();
-    let rom_path = args.get(1).expect("Expected a path to the ROM to open.");
+    let rom_path = Path::new(args.get(1).expect("Expected a path to the ROM to open."));
     let data = fs::read(rom_path).expect("Unable to read file");
+
+    println!(
+        "CHIP-8   ROM: {}",
+        rom_path.file_name().unwrap().to_str().unwrap()
+    );
+    stdout()
+        .execute(cursor::SavePosition)
+        .expect("To save cursor position.");
 
     let mut emulator = Chip8::new(draw_screen);
     let load_rom_result = emulator.load(data);
