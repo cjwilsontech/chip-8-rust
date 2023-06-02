@@ -1,4 +1,4 @@
-use super::{get_opcode, Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, PROG_END, PROG_START};
+use super::{get_opcode, Chip8, Display, DISPLAY_HEIGHT, DISPLAY_WIDTH, PROG_END, PROG_START};
 use crate::emulator::SPRITE_START;
 use std::{thread, time};
 
@@ -35,10 +35,10 @@ fn clear() {
     let mut chip8 = get_emulator();
     chip8.memory[PROG_START] = 0x00;
     chip8.memory[PROG_START + 1] = 0xE0;
-    chip8.display = [true; 64 * 32];
+    chip8.display = [[true; DISPLAY_WIDTH]; DISPLAY_HEIGHT];
     chip8.cycle();
     assert_eq!(chip8.reg_pc, 0x202);
-    assert_eq!(chip8.display, [false; 64 * 32]);
+    assert_eq!(chip8.display, [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT]);
 }
 
 #[test]
@@ -559,36 +559,36 @@ fn draw_sprite() {
     chip8.cycle();
     assert_eq!(chip8.reg_pc as usize, PROG_START + 4);
     assert_eq!(chip8.reg_v[15], 1);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 4], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 5], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 6], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 7], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 8], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 10 + 9], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 4], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 5], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 6], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 7], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 8], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 11 + 9], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 4], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 5], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 6], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 7], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 8], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 12 + 9], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 4], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 5], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 6], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 7], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 8], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 13 + 9], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 4], false);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 5], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 6], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 7], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 8], true);
-    assert_eq!(chip8.display[DISPLAY_WIDTH * 14 + 9], false);
+    assert_eq!(chip8.display[10][4], false);
+    assert_eq!(chip8.display[10][5], true);
+    assert_eq!(chip8.display[10][6], true);
+    assert_eq!(chip8.display[10][7], false);
+    assert_eq!(chip8.display[10][8], true);
+    assert_eq!(chip8.display[10][9], false);
+    assert_eq!(chip8.display[11][4], false);
+    assert_eq!(chip8.display[11][5], true);
+    assert_eq!(chip8.display[11][6], true);
+    assert_eq!(chip8.display[11][7], true);
+    assert_eq!(chip8.display[11][8], true);
+    assert_eq!(chip8.display[11][9], false);
+    assert_eq!(chip8.display[12][4], false);
+    assert_eq!(chip8.display[12][5], true);
+    assert_eq!(chip8.display[12][6], false);
+    assert_eq!(chip8.display[12][7], true);
+    assert_eq!(chip8.display[12][8], true);
+    assert_eq!(chip8.display[12][9], false);
+    assert_eq!(chip8.display[13][4], false);
+    assert_eq!(chip8.display[13][5], true);
+    assert_eq!(chip8.display[13][6], false);
+    assert_eq!(chip8.display[13][7], true);
+    assert_eq!(chip8.display[13][8], true);
+    assert_eq!(chip8.display[13][9], false);
+    assert_eq!(chip8.display[14][4], false);
+    assert_eq!(chip8.display[14][5], true);
+    assert_eq!(chip8.display[14][6], false);
+    assert_eq!(chip8.display[14][7], false);
+    assert_eq!(chip8.display[14][8], false);
+    assert_eq!(chip8.display[14][9], false);
 }
 
 #[test]
@@ -616,4 +616,4 @@ fn decrements_timers() {
 fn get_emulator() -> Chip8 {
     Chip8::new(draw_screen)
 }
-fn draw_screen(_: &[bool; DISPLAY_WIDTH * DISPLAY_HEIGHT]) {}
+fn draw_screen(_: &Display) {}
